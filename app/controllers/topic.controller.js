@@ -1,6 +1,7 @@
 const db = require("../models");
 const Topic = db.topic;
 const PersonTopic = db.persontopic;
+const Appointment = db.appointment;
 const Op = db.Sequelize.Op;
 
 // Create and Save a new Topic
@@ -12,7 +13,7 @@ exports.create = (req, res) => {
       });
       return;
     }
-  
+
     // Create a Topic
     const topic = {
       id: req.body.id,
@@ -20,7 +21,7 @@ exports.create = (req, res) => {
       name: req.body.name,
       abbr: req.body.abbr
     };
-  
+
     // Save Topic in the database
     Topic.create(topic)
       .then(data => {
@@ -38,7 +39,7 @@ exports.create = (req, res) => {
 exports.findAll = (req, res) => {
     const id = req.query.id;
     var condition = id ? { id: { [Op.like]: `%${id}%` } } : null;
-  
+
     Topic.findAll({ where: condition })
       .then(data => {
         res.send(data);
@@ -67,6 +68,24 @@ exports.findAllForGroup = (req, res) => {
     });
 };
 
+// Retrieve all Topics for a group from the database.
+exports.getAppointmentHourCount = (req, res) => {
+  const id = req.params.groupId;
+  const currWeek = req.params.currWeek;
+  var week = getWeekFromDate(currWeek)
+  var firstDay = week.first.slice(0,10)
+  var lastDay = week.last.slice(0,10)
+
+  data = db.sequelize.query(("SELECT SUM(CASE WHEN t.id = topicId THEN TIMESTAMPDIFF(minute, startTime, endTime) ELSE 0 END) AS diff, t.name FROM appointments JOIN topics t WHERE t.id = topicId AND appointments.groupId = " + id + " AND appointments.date BETWEEN " + firstDay + " AND " + lastDay),
+  { type:db.sequelize.QueryTypes.SELECT, raw: true})
+   .then(function(data) {
+      res.send(data)
+  })
+  .catch(err => {
+      res.status(500).send({ message: err.message });
+  });
+};
+
 // Retrieve topics per group for persontopics for a specific person
 exports.findTopicByGroupForPerson = (req, res) => {
   const personId = req.params.personId;
@@ -75,7 +94,7 @@ exports.findTopicByGroupForPerson = (req, res) => {
   Topic.findAll({
     where: { '$persontopic.personId$': personId, groupId: groupId },
     include: [ {
-        model: PersonTopic, 
+        model: PersonTopic,
         as: 'persontopic',
         right: true
     } ]
@@ -96,7 +115,7 @@ exports.findTopicForPerson = (req, res) => {
   Topic.findAll({
     where: { '$persontopic.personId$': id },
     include: [ {
-        model: PersonTopic, 
+        model: PersonTopic,
         as: 'persontopic',
         right: true
     } ]
@@ -113,7 +132,7 @@ exports.findTopicForPerson = (req, res) => {
 // Find a single Topic with an id
 exports.findOne = (req, res) => {
     const id = req.params.id;
-  
+
     Topic.findByPk(id)
       .then(data => {
         if (data) {
@@ -134,7 +153,7 @@ exports.findOne = (req, res) => {
 // Update a Topic by the id in the request
 exports.update = (req, res) => {
     const id = req.params.id;
-  
+
     Topic.update(req.body, {
       where: { id: id }
     })
@@ -159,7 +178,7 @@ exports.update = (req, res) => {
 // Delete a Topic with the specified id in the request
 exports.delete = (req, res) => {
     const id = req.params.id;
-  
+
     Topic.destroy({
       where: { id: id }
     })
@@ -197,4 +216,3 @@ exports.deleteAll = (req, res) => {
         });
       });
   };
-  

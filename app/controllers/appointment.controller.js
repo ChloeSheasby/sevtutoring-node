@@ -76,9 +76,9 @@ exports.findAll = (req, res) => {
 exports.findAppointmentsForGroup = (req, res) => {
   const groupId = req.params.groupId;
 
-  Appointment.findAll({ 
-    where: { 
-      groupId: groupId 
+  Appointment.findAll({
+    where: {
+      groupId: groupId
     }
   })
     .then(data => {
@@ -99,14 +99,14 @@ exports.findAllUpcomingForPersonForGroup = (req, res) => {
   const date = new Date();
 
   Appointment.findAll({
-    where: { groupId: groupId, date: { [Op.gte]: date }, 
+    where: { groupId: groupId, date: { [Op.gte]: date },
       [Op.and]: [
         {
             status: { [Op.not]: "cancelled" }
-        }, 
+        },
         {
             status: { [Op.not]: "studentCancel" }
-        }, 
+        },
         {
             status: { [Op.not]: "tutorCancel" }
         }
@@ -140,14 +140,14 @@ exports.findAllPassedForPersonForGroupTutor = (req, res) => {
 
 // Note: had to put the the tow OP.or in an Op.and to get Sequelize to generate SQL correctly
   Appointment.findAll({
-    where: { groupId: groupId, 
+    where: { groupId: groupId,
             [Op.and]: [
-              {status: {[Op.notLike]: "tutorCancel"}}, 
+              {status: {[Op.notLike]: "tutorCancel"}},
               {status: { [Op.notLike]: "studentCancel"}}
             ],
             [Op.and] : [
               {[Op.or]: [
-                {date: { [Op.lt]: date }}, 
+                {date: { [Op.lt]: date }},
                 {[Op.and] : [
                     {date: {[Op.eq]: date }},
                     {endTime: {[Op.lt]: endTime }}
@@ -179,7 +179,7 @@ exports.findAllPassedForPersonForGroupStudent = (req, res) => {
   const date = new Date();
 
   Appointment.findAll({
-    where: { groupId: groupId, date: { [Op.lte]: date }, status: { [Op.like]: "complete" }},
+    where: { groupId: groupId, date: { [Op.lte]: date }, status: { [Op.like]: "complete" } },
     include: [{
       where: { '$personappointment.personId$': personId, feedbacknumber: { [Op.eq]: null }, feedbacktext: { [Op.eq]: null } },
       model: PersonAppointment,
@@ -239,7 +239,10 @@ exports.getTutorForAppointment = (req, res) => {
       model: PersonAppointment,
       as: 'personappointment',
       required: true,
-      where: { isTutor: true, appointmentId: appId },
+      where: {
+        isTutor: true,
+        appointmentId: appId,
+      },
 
     }/*,
       {
@@ -282,6 +285,35 @@ exports.findAllUpcomingForGroup = (req, res) => {
     });
 };
 
+exports.getAppointmentHourCount = (req, res) => {
+  const groupId = req.params.groupId;
+  const currWeek = req.params.currWeek;
+  var week = getWeekFromDate(currWeek)
+  var firstDay = week.first
+  var lastDay = week.last
+  Appointment.findAll({
+    where: { groupId: groupId,  date: { [Op.between]: [firstDay, lastDay]}},
+    attributes: [
+      [db.sequelize.literal("COUNT(id)"), "count"],
+      [db.sequelize.literal("SUM(TIMESTAMPDIFF(minute,startTime,endTime))"), "diff"],
+      [db.sequelize.literal("SUM(CASE WHEN status = 'available' THEN TIMESTAMPDIFF(minute,startTime,endTime) ELSE 0 END)"), "available"],
+      [db.sequelize.literal("SUM(CASE WHEN status = 'pending' THEN TIMESTAMPDIFF(minute,startTime,endTime) ELSE 0 END)"), "pending"],
+      [db.sequelize.literal("SUM(CASE WHEN status = 'booked' THEN TIMESTAMPDIFF(minute,startTime,endTime) ELSE 0 END)"), "booked"],
+      [db.sequelize.literal("SUM(CASE WHEN status = 'complete' THEN TIMESTAMPDIFF(minute,startTime,endTime) ELSE 0 END)"), "complete"],
+    ],
+  })
+  .then(data => {
+    res.send(data);
+  })
+
+  .catch(err => {
+    res.status(500).send({
+      message:
+        err.message || "Some error occurred while retrieving appointments for group."
+    });
+  });
+};
+
 // Retrieve all appointments for a person for a group from the database.
 exports.findAllForGroup = (req, res) => {
   const groupId = req.params.groupId;
@@ -302,17 +334,23 @@ exports.findAllForGroup = (req, res) => {
       model: PersonAppointment,
       as: 'personappointment',
       required: true
-    }]
+    },
+    {
+      model: Appointment,
+      as: 'appointment',
+      required: true
+    },
+    ]
   })
-    .then(data => {
-      res.send(data);
-    })
-    .catch(err => {
-      res.status(500).send({
-        message:
-          err.message || "Some error occurred while retrieving appointments for group."
-      });
+  .then(data => {
+    res.send(data);
+  })
+  .catch(err => {
+    res.status(500).send({
+      message:
+        err.message || "Some error occurred while retrieving appointments for group."
     });
+  });
 };
 
 // Retrieve all Appointments for a person from the database.
@@ -629,7 +667,7 @@ async function authorize(callback, data) {
   const client_id = process.env.GOOGLE_AUDIENCE;
   const client_secret = process.env.CLIENT_SECRET;
   const redirect_url = process.env.REDIRECT_URL;
-  
+
   const oAuth2Client = new google.auth.OAuth2(
     client_id, client_secret, 'postmessage');
 
@@ -662,11 +700,10 @@ await findFirstTutorForAppointment(data[0].id);
   })
   .then(res => res.json())
   .then(json => creds = json);
-  
+
   console.log(creds)
 
   oAuth2Client.setCredentials(creds);
   callback(oAuth2Client, data);
 
 }
-

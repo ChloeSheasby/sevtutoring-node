@@ -158,6 +158,24 @@ exports.findAllForGroup = (req, res) => {
   });
 };
 
+// Retrieve all Topics for a group from the database.
+exports.getAppointmentHourCount = (req, res) => {
+  const id = req.params.groupId;
+  const currWeek = req.params.currWeek;
+  var week = getWeekFromDate(currWeek)
+  var firstDay = week.first.slice(0,10)
+  var lastDay = week.last.slice(0,10)
+
+  data = db.sequelize.query(("SELECT SUM(TIMESTAMPDIFF(minute, a.startTime, a.endTime)) AS diff, p.fName, p.lName FROM people AS p LEFT JOIN personroles pr ON pr.personId = p.id LEFT JOIN roles r ON r.id = pr.roleId LEFT JOIN personappointments pa ON pa.personId = p.id LEFT JOIN appointments a ON a.id = pa.appointmentId WHERE r.groupId = " + id + " AND a.date BETWEEN " + firstDay + " AND " + lastDay),
+  { type:db.sequelize.QueryTypes.SELECT, raw: true})
+   .then(function(data) {
+      res.send(data)
+  })
+  .catch(err => {
+      res.status(500).send({ message: err.message });
+  });
+};
+
 // Find pending tutors for group
 exports.findPendingTutorsForGroup = (req, res) => {
   const groupId = req.params.groupId;
