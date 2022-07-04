@@ -16,7 +16,7 @@ exports.create = (req, res) => {
       });
       return;
     }
-  
+
     // Create a Person
     const person = {
       id: req.body.id,
@@ -27,7 +27,7 @@ exports.create = (req, res) => {
       refresh_token: req.body.refresh_token,
       expiration_date: req.body.expiration_date
     };
-  
+
     // Save Person in the database
     Person.create(person)
       .then(data => {
@@ -45,7 +45,7 @@ exports.create = (req, res) => {
 exports.findAll = (req, res) => {
     const id = req.query.id;
     var condition = id ? { id: { [Op.like]: `%${id}%` } } : null;
-  
+
     Person.findAll({ where: condition })
       .then(data => {
         res.send(data);
@@ -64,12 +64,12 @@ const appId = req.params.appointmentId;
 
   Person.findAll({
     include: [ {
-        model: PersonAppointment, 
+        model: PersonAppointment,
         as: 'personappointment',
         required: true,
         where: { isTutor: true },
         include: [ {
-          model: Appointment, 
+          model: Appointment,
           as: 'appointment',
           required: true,
           where: { '$personappointment->appointment.id$': appId}
@@ -89,7 +89,7 @@ const appId = req.params.appointmentId;
 // Find a single Person with an id
 exports.findOne = (req, res) => {
     const id = req.params.id;
-  
+
     Person.findByPk(id)
       .then(data => {
         if (data) {
@@ -111,9 +111,9 @@ exports.findOne = (req, res) => {
 exports.findByEmail = (req, res) => {
   const email = req.params.email;
 
-  Person.findOne({ 
+  Person.findOne({
     where: {
-      email: email 
+      email: email
     }
   })
     .then(data => {
@@ -139,11 +139,11 @@ exports.findAllForGroup = (req, res) => {
 
   Person.findAll({
     include: [ {
-        model: PersonRole, 
+        model: PersonRole,
         as: 'personrole',
         required: true,
         include: [ {
-          model: Role, 
+          model: Role,
           as: 'role',
           required: true,
           where: { '$personrole->role.groupId$': groupId}
@@ -166,10 +166,46 @@ exports.getAppointmentHourCount = (req, res) => {
   var firstDay = week.first.slice(0,10)
   var lastDay = week.last.slice(0,10)
 
-  data = db.sequelize.query(("SELECT SUM(TIMESTAMPDIFF(minute, a.startTime, a.endTime)) AS diff, p.fName, p.lName FROM people AS p LEFT JOIN personroles pr ON pr.personId = p.id LEFT JOIN roles r ON r.id = pr.roleId LEFT JOIN personappointments pa ON pa.personId = p.id LEFT JOIN appointments a ON a.id = pa.appointmentId WHERE r.groupId = " + id + " AND a.date BETWEEN " + firstDay + " AND " + lastDay),
-  { type:db.sequelize.QueryTypes.SELECT, raw: true})
-   .then(function(data) {
-      res.send(data)
+  data = db.sequelize.query(
+      ("SELECT "
+	    +"SUM(CASE"
+	    +"		WHEN pa.appointmentId = a.id"
+      +"          AND a.date BETWEEN '" + firstDay + "' AND '" + lastDay + "'"
+	    +"		THEN TIMESTAMPDIFF(minute, a.startTime, a.endTime)"
+	    +"		ELSE 0 END)"
+      +"      AS diff,"
+      +"      p.fName,"
+      +"      p.lName,"
+      +"  COUNT(DISTINCT"
+	    +"		IF(a.status != 'available'"
+      +"          AND pa.appointmentId = a.id"
+      +"          AND a.date BETWEEN '" + firstDay + "'"
+      +"          AND '" + lastDay + "', a.id,  NULL))"
+	    +"	AS apptCount,"
+      +"  SUM(CASE"
+	    +"		WHEN pa.appointmentId = a.id"
+	    +"				AND ((a.status = 'booked' AND a.type = 'Private')"
+	    +"				OR (a.status = 'booked' AND a.type = 'Group' "
+	    +"					AND (SELECT COUNT(spa.id)"
+	    +"						FROM roles AS sr "
+	    +"							LEFT JOIN personroles spr ON spr.roleId = sr.id"
+	    +"							LEFT JOIN personappointments spa ON spr.personId = spa.personId"
+	    +"						WHERE spa.id = a.id AND sr.type = 'Student') > 0)"
+	    +"				OR (a.status = 'complete'))"
+      +"          AND a.date BETWEEN '" + firstDay + "' AND '" + lastDay + "'"
+      +"          THEN TIMESTAMPDIFF(minute, a.startTime, a.endTime)"
+      +"          ELSE 0"
+      +"          END) "
+	    +"	AS hours_paying"
+      +"  FROM people AS p"
+	    +"	LEFT JOIN personroles pr ON pr.personId = p.id"
+      +"      LEFT JOIN roles r ON r.id = pr.roleId"
+	    +"	LEFT JOIN personappointments pa ON pa.personId = p.id"
+      +"      LEFT JOIN appointments a ON a.id = pa.appointmentId"
+      +"      WHERE r.groupId = 1 AND r.type = 'Tutor'"),
+  { type:db.sequelize.QueryTypes.SELECT})
+    .then(function(data) {
+      res.status(200).json(data)
   })
   .catch(err => {
       res.status(500).send({ message: err.message });
@@ -182,12 +218,12 @@ exports.findPendingTutorsForGroup = (req, res) => {
 
   Person.findAll({
     include: [ {
-        model: PersonRole, 
+        model: PersonRole,
         as: 'personrole',
         required: true,
         where: { '$personrole.status$': "applied"},
         include: [ {
-          model: Role, 
+          model: Role,
           as: 'role',
           required: true,
           where: { '$personrole->role.groupId$': groupId, '$personrole->role.type$': "Tutor"}
@@ -208,13 +244,13 @@ exports.findApprovedTutorsForGroup = (req, res) => {
 
   Person.findAll({
     include: [ {
-        model: PersonRole, 
+        model: PersonRole,
         as: 'personrole',
         required: true,
         where: Sequelize.or({'$personrole.status$': "approved"},
                             {'$personrole.status$': "Approved"}),
         include: [ {
-          model: Role, 
+          model: Role,
           as: 'role',
           required: true,
           where: { '$personrole->role.groupId$': groupId, '$personrole->role.type$': "Tutor"}
@@ -232,7 +268,7 @@ exports.findApprovedTutorsForGroup = (req, res) => {
 // Update a Person by the id in the request
 exports.update = (req, res) => {
     const id = req.params.id;
-  
+
     Person.update(req.body, {
       where: { id: id }
     })
@@ -257,7 +293,7 @@ exports.update = (req, res) => {
 // Delete a Person with the specified id in the request
 exports.delete = (req, res) => {
     const id = req.params.id;
-  
+
     Person.destroy({
       where: { id: id }
     })
@@ -295,4 +331,25 @@ exports.deleteAll = (req, res) => {
         });
       });
   };
-  
+
+function getWeekFromDate(date) {
+  var year = parseInt(date.substring(0,4));
+  var month = parseInt(date.substring(5,7));
+  var day = parseInt(date.substring(8,10));
+  var curr = new Date(year, month-1, day); // get current date
+  console.log(day + ", " + month + ", " + year) // something wonky here, month is adding one each time.
+  console.log("CURR " + curr)
+  var first = curr.getDate() - curr.getDay(); // First day is the day of the month - the day of the week
+  var last = first + 6; // last day is the first day + 6
+
+  var firstday = new Date(curr.setDate(first));
+  var lastday = new Date(curr.setDate(last));
+
+  return toSQLDate(firstday, lastday);
+}
+
+function toSQLDate(date1, date2) {
+  first = date1.toISOString().slice(0, 19).replace('T', ' ');
+  last = date2.toISOString().slice(0, 19).replace('T', ' ');
+  return {first, last};
+}
